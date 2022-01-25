@@ -403,7 +403,7 @@ def _parse_img(_topic, message=""):
     img_state["img_frame_count"] = int(img_bitmap.height / matrixportal.display.height)
     img_sprite = displayio.TileGrid(
         img_bitmap,
-        pixel_shader=displayio.ColorConverter(),
+        pixel_shader=getattr(img_bitmap, 'pixel_shader', displayio.ColorConverter()),
         tile_width=img_bitmap.width,
         tile_height=matrixportal.display.height,
         x=max(matrixportal.display.width - img_bitmap.width, 0) // 2,

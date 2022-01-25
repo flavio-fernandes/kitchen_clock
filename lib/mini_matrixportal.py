@@ -74,6 +74,7 @@ class MatrixPortal:
         *,
         esp=None,
         external_spi=None,
+        bit_depth=4,
         debug=False
     ):
 
@@ -84,7 +85,7 @@ class MatrixPortal:
             matrix = rgbmatrix.RGBMatrix(
                 width=64,
                 height=32,
-                bit_depth=2,
+                bit_depth=bit_depth,
                 rgb_pins=[board.MTX_R1, board.MTX_G1, board.MTX_B1, board.MTX_R2, board.MTX_G2,
                           board.MTX_B2],
                 addr_pins=[board.MTX_ADDRA, board.MTX_ADDRB, board.MTX_ADDRC, board.MTX_ADDRD],
@@ -98,7 +99,7 @@ class MatrixPortal:
 
         if self._debug:
             print("Init display")
-        self.splash = displayio.Group(max_size=15)
+        self.splash = displayio.Group()
 
         if esp:  # If there was a passed ESP Object
             if self._debug:

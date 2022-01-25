@@ -10,14 +10,7 @@ displaying custom messages. There is also support for using
 If you rather use a PyPortal, check out the [pyportal_station](https://github.com/flavio-fernandes/pyportal_station)
 project.
 
-### Challenge
-
-While I am using a newer version of Circuit Python, Matrix Portal
-and the Mini-MQTT libraries just don't fit in the MatrixPortal
-microcontroller. That made this project a little challenging, and I now better
-understand why the upcoming version 7 is so important. The compromise I
-came up with was to use an older version of Mini-MQTT and a [*crippled*](https://github.com/flavio-fernandes/kitchen_clock/blob/main/lib/mini_matrixportal.py)
-version of the Matrix Portal library.
+### Libraries
 
 **Adafruit_CircuitPython_MiniMQTT**: Using commit [407bb4f](https://github.com/adafruit/Adafruit_CircuitPython_MiniMQTT/commit/407bb4f43c0e46c5bcaceccf01481ab9690d6ce3)
 
@@ -25,16 +18,16 @@ version of the Matrix Portal library.
 and removing all the code I did not need.
 
 Besides the 2 libraries above, this project uses the following awesome libraries from the
-[bundle 6.2-20210507](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/tag/20210507):
-- adafruit_bitmap_font (1.5.0)
-- adafruit_display_shapes (2.1.0)
-- adafruit_display_text (2.18.4)
-- adafruit_esp32spi (3.5.9)
-- adafruit_logging (1.2.8)
-- adafruit_requests (1.9.9)
-- neopixel (6.0.3)
+[bundle 7.x 20220119](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/tag/20220119):
+- adafruit_bitmap_font (1.5.5)
+- adafruit_display_shapes (2.4.1)
+- adafruit_display_text (2.21.2)
+- adafruit_esp32spi (3.6.1)
+- adafruit_logging (3.7.3)
+- adafruit_requests (1.10.5)
+- neopixel (6.2.3)
 
-But you can probably use newer versions of the 6.2 bundle.
+But you can probably use newer versions of the 7.x bundle.
 
 ### Hardware
 
@@ -121,34 +114,39 @@ mosquitto_pub -h $MQTT -t "${PREFIX}/brightness" -m on
 mosquitto_pub -h $MQTT -t "${PREFIX}/brightness" -m off
 
 # Neopixel control
-mosquitto_pub -h $MQTT -t "/${PREFIX}/neopixel" -m 0        ; # off
-mosquitto_pub -h $MQTT -t "/${PREFIX}/neopixel" -m 0xff     ; # blue
-mosquitto_pub -h $MQTT -t "/${PREFIX}/neopixel" -m 0xff00   ; # green
-mosquitto_pub -h $MQTT -t "/${PREFIX}/neopixel" -m 0xff0000 ; # red
+mosquitto_pub -h $MQTT -t "${PREFIX}/neopixel" -m 0        ; # off
+mosquitto_pub -h $MQTT -t "${PREFIX}/neopixel" -m 0xff     ; # blue
+mosquitto_pub -h $MQTT -t "${PREFIX}/neopixel" -m 0xff00   ; # green
+mosquitto_pub -h $MQTT -t "${PREFIX}/neopixel" -m 0xff0000 ; # red
 
 # On board led blink
-mosquitto_pub -h $MQTT -t "/${PREFIX}/blinkrate" -m 0    ; # off
-mosquitto_pub -h $MQTT -t "/${PREFIX}/blinkrate" -m 0.1  ; # 100ms
+mosquitto_pub -h $MQTT -t "${PREFIX}/blinkrate" -m 0    ; # off
+mosquitto_pub -h $MQTT -t "${PREFIX}/blinkrate" -m 0.1  ; # 100ms
 
 # Messages
-mosquitto_pub -h $MQTT -t "/${PREFIX}/msg" -m foo
+mosquitto_pub -h $MQTT -t "${PREFIX}/msg" -m foo
 
-mosquitto_pub -h $MQTT -t "/${PREFIX}/msg" -m \
+mosquitto_pub -h $MQTT -t "${PREFIX}/msg" -m \
   '{"msg": "hello", "text_color": "#0x595dff", "timeout": 40, "x": "center"}'
 
-mosquitto_pub -h $MQTT -t "/${PREFIX}/msg" -m \
+mosquitto_pub -h $MQTT -t "${PREFIX}/msg" -m \
   '{"msg": "hi", "no_scroll": "True", "x": -10}'
 
-mosquitto_pub -h $MQTT -t "/${PREFIX}/msg" -m '{"msg": "hi scroll"}'
+mosquitto_pub -h $MQTT -t "${PREFIX}/msg" -m '{"msg": "hi scroll"}'
 
-mosquitto_pub -h $MQTT -t "/${PREFIX}/msg" -n ; # clear
+mosquitto_pub -h $MQTT -t "${PREFIX}/msg" -n ; # clear
 
 # Animations
-mosquitto_pub -h $MQTT -t "/${PREFIX}/img" -m 'parrot'
+mosquitto_pub -h $MQTT -t "${PREFIX}/img" -m 'parrot'
 
-mosquitto_pub -h $MQTT -t "/${PREFIX}/img" -m '{"img": "sine.bmp" }'
+mosquitto_pub -h $MQTT -t "${PREFIX}/img" -m '{"img": "sine.bmp" }'
 
-mosquitto_pub -h $MQTT -t "/${PREFIX}/img" -m '{"img": "bmps/rings.bmp", "timeout": 10 }'
+mosquitto_pub -h $MQTT -t "${PREFIX}/img" -m '{"img": "bmps/rings.bmp", "timeout": 10 }'
 
-mosquitto_pub -h $MQTT -t "/${PREFIX}/img" -n ; # clear
+for x in cat fireworks hop parrot rings ruby sine ; do \
+  mosquitto_pub -h $MQTT -t "${PREFIX}/img" -m $x
+  sleep 10
+done
+
+mosquitto_pub -h $MQTT -t "${PREFIX}/img" -n ; # clear
 ```
