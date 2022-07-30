@@ -15,6 +15,8 @@ import microcontroller
 import neopixel
 import rtc
 
+from microcontroller import watchdog as wd
+from watchdog import WatchDogMode
 import adafruit_esp32spi.adafruit_esp32spi_socket as socket
 from adafruit_display_shapes.line import Line
 from adafruit_esp32spi import adafruit_esp32spi_wifimanager
@@ -22,9 +24,11 @@ import adafruit_minimqtt.adafruit_minimqtt as MQTT
 from mini_matrixportal import MatrixPortal
 from secrets import secrets
 
+ENABLE_DOG = True
 MSG_TIME_IDX = 0
 MSG_TXT_IDX = 1
 
+dog_is_enabled = False
 matrixportal = MatrixPortal(debug=True)
 print("Connecting to WiFi...")
 wifi = adafruit_esp32spi_wifimanager.ESPSPI_WiFiManager(
@@ -32,6 +36,34 @@ wifi = adafruit_esp32spi_wifimanager.ESPSPI_WiFiManager(
 )
 wifi.connect()
 print("My IP address is", matrixportal._esp.pretty_ip(matrixportal._esp.ip_address))
+
+
+def run_once():
+    global dog_is_enabled
+
+    if ENABLE_DOG:
+        print("--------------------------------------------------------")
+        print("IMPORTANT: watch dog is enabled! To disable it, do:")
+        print("from microcontroller import watchdog as wd ; wd.deinit()")
+        print("--------------------------------------------------------")
+        wd.timeout = 15  # timeout in seconds
+        wd.mode = WatchDogMode.RESET
+        dog_is_enabled = True
+    else:
+        print("NOTE: watch dog is disabled")
+        no_dog()
+
+
+def no_dog():
+    global dog_is_enabled
+
+    try:
+        wd.deinit()
+        dog_is_enabled = False
+    except Exception as e:
+        print(f"could not disable watchdog: {e}")
+    return not dog_is_enabled
+
 
 # ------- Real Time Clock  ------- #
 
@@ -158,6 +190,9 @@ def display_main():
 
 def one_sec_tick():
     global msg_state, display_needs_refresh, img_state
+
+    if dog_is_enabled:
+        wd.feed()
 
     # Manage timeouts
     if msg_state:
@@ -403,7 +438,7 @@ def _parse_img(_topic, message=""):
     img_state["img_frame_count"] = int(img_bitmap.height / matrixportal.display.height)
     img_sprite = displayio.TileGrid(
         img_bitmap,
-        pixel_shader=getattr(img_bitmap, 'pixel_shader', displayio.ColorConverter()),
+        pixel_shader=getattr(img_bitmap, "pixel_shader", displayio.ColorConverter()),
         tile_width=img_bitmap.width,
         tile_height=matrixportal.display.height,
         x=max(matrixportal.display.width - img_bitmap.width, 0) // 2,
@@ -597,6 +632,8 @@ def _try_reconnect(e):
         print(f"FATAL! Failed reconnect: {e}")
         microcontroller.reset()
 
+
+run_once()
 
 # ------------- Main loop ------------- #
 

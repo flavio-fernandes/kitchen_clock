@@ -10,6 +10,8 @@ displaying custom messages. There is also support for using
 If you rather use a PyPortal, check out the [pyportal_station](https://github.com/flavio-fernandes/pyportal_station)
 project.
 
+[![Kitchen Clock Show-and-Tell](https://live.staticflickr.com/65535/52251360538_e63c498a2d_z.jpg)](https://youtu.be/DB5dh_nL3hY?t=1666)
+
 ### Libraries
 
 **Adafruit_CircuitPython_MiniMQTT**: Using commit [407bb4f](https://github.com/adafruit/Adafruit_CircuitPython_MiniMQTT/commit/407bb4f43c0e46c5bcaceccf01481ab9690d6ce3)
@@ -18,14 +20,20 @@ project.
 and removing all the code I did not need.
 
 Besides the 2 libraries above, this project uses the following awesome libraries from the
-[bundle 7.x 20220119](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/tag/20220119):
-- adafruit_bitmap_font (1.5.5)
-- adafruit_display_shapes (2.4.1)
-- adafruit_display_text (2.21.2)
-- adafruit_esp32spi (3.6.1)
-- adafruit_logging (3.7.3)
-- adafruit_requests (1.10.5)
-- neopixel (6.2.3)
+[bundle 7.x 20220730](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/tag/20220730):
+```
+Found device at /Volumes/CIRCUITPY, running CircuitPython 7.3.2.
+- adafruit_bitmap_font==1.5.8
+- adafruit_bus_device==5.2.0
+- adafruit_display_shapes==2.5.1
+- adafruit_display_text==2.22.7
+- adafruit_esp32spi==5.0.0
+- adafruit_logging==4.1.3
+- adafruit_minimqtt==0.0.0-auto.0
+- adafruit_pixelbuf==1.1.5
+- adafruit_requests==1.12.4
+- neopixel==6.3.3
+```
 
 But you can probably use newer versions of the 7.x bundle.
 
