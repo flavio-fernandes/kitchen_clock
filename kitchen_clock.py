@@ -17,8 +17,8 @@ import rtc
 
 from microcontroller import watchdog as wd
 from watchdog import WatchDogMode
-import adafruit_esp32spi.adafruit_esp32spi_socket as socket
-from adafruit_display_shapes.line import Line
+import adafruit_connection_manager
+import adafruit_logging
 from adafruit_esp32spi import adafruit_esp32spi_wifimanager
 import adafruit_minimqtt.adafruit_minimqtt as MQTT
 from mini_matrixportal import MatrixPortal
@@ -89,11 +89,31 @@ matrixportal.set_text(" ", MSG_TXT_IDX)
 
 SECS_COLOR = 0x404040
 SECS_WIDTH = 4
-seconds_line = Line(
-    0, 0, matrixportal.display.width, matrixportal.display.height, 0xFF0000
-)
+
+# The seconds indicator is repainted every second by display_main(). It used
+# to be a freshly constructed adafruit_display_shapes.Line object each time,
+# which allocates a new Bitmap+Palette+TileGrid 86400 times a day. CircuitPython's
+# allocator doesn't compact the heap, so that constant churn slowly fragments
+# it over days of uptime -- this is why the clock used to visibly slow down
+# the longer it stayed powered on. Painting into one pre-allocated bitmap
+# avoids allocating anything on the once-a-second hot path.
+seconds_bitmap = displayio.Bitmap(matrixportal.display.width, 1, 2)
+seconds_palette = displayio.Palette(2)
+seconds_palette[0] = 0x000000
+seconds_palette.make_transparent(0)
+seconds_palette[1] = SECS_COLOR
+seconds_line = displayio.TileGrid(seconds_bitmap, pixel_shader=seconds_palette, x=0, y=1)
 seconds_index = len(matrixportal.splash)
 matrixportal.splash.append(seconds_line)
+
+
+def _set_seconds_indicator(x0, x1):
+    """Repaint the seconds bar in place, between columns x0 (incl) and x1 (excl)."""
+    seconds_bitmap.fill(0)
+    x0 = max(0, min(x0, seconds_bitmap.width))
+    x1 = max(0, min(x1, seconds_bitmap.width))
+    for x in range(x0, x1):
+        seconds_bitmap[x, 0] = 1
 
 
 def _set_text_center(val, index, text_color=None):
@@ -169,9 +189,7 @@ def display_main():
     global display_needs_refresh, cached_mins, counters
 
     now = global_rtc.datetime
-    matrixportal.splash[seconds_index] = Line(
-        now.tm_sec, 1, now.tm_sec + SECS_WIDTH, 1, SECS_COLOR
-    )
+    _set_seconds_indicator(now.tm_sec, now.tm_sec + SECS_WIDTH)
     if "local_time" not in counters:
         _set_text_center(str(int(time.monotonic())), MSG_TIME_IDX)
         return
@@ -262,7 +280,7 @@ def _parse_brightness(topic, message):
 def _parse_neopixel(_topic, message):
     global pixels
     try:
-        value = int(message)
+        value = int(message, 0)
     except ValueError as e:
         print(f"bad neo value: {e}")
         return
@@ -352,11 +370,21 @@ def _parse_msg_message(topic, message):
     # timeout
     timeout = msg_state.get("timeout")
     if timeout is not None:
-        msg_state["timeout"] = int(timeout)
+        try:
+            msg_state["timeout"] = int(timeout)
+        except (ValueError, TypeError) as e:
+            print(f"Bad timeout {timeout!r}: {e}")
+            del msg_state["timeout"]
 
+    # A bad color must not blow up the whole mqtt loop (and force a
+    # disconnect/reconnect) -- fall back to whatever color is already set.
     color = msg_state.get("text_color") or msg_state.get("color")
     if color:
-        msg_state["text_color"] = matrixportal.html_color_convert(color)
+        try:
+            msg_state["text_color"] = matrixportal.html_color_convert(color)
+        except (ValueError, TypeError) as e:
+            print(f"Bad text_color {color!r}: {e}")
+            msg_state.pop("text_color", None)
 
     no_scroll = msg_state.get("no_scroll")
     if no_scroll is not None:
@@ -407,7 +435,7 @@ def _parse_img(_topic, message=""):
     except ValueError:
         img_params = {"img": message, "timeout": 20}
 
-    if img_index:
+    if img_index is not None:
         del matrixportal.splash[img_index]
         img_index = None
 
@@ -463,7 +491,7 @@ def _parse_img(_topic, message=""):
         matrixportal.set_text(" ", MSG_TXT_IDX)
         if seconds_index is not None:
             # Clear seconds line
-            matrixportal.splash[seconds_index] = Line(0, 1, 0, 1, 0x00)
+            seconds_bitmap.fill(0)
 
 
 def advance_img():
@@ -534,18 +562,54 @@ def message(_client, topic, message):
 # ------------- Network Connection ------------- #
 
 # Initialize MQTT interface with the esp interface
-# MQTT.set_socket(socket, matrixportal.network._wifi.esp)
-MQTT.set_socket(socket, matrixportal._esp)
+pool = adafruit_connection_manager.get_radio_socketpool(matrixportal._esp)
+ssl_context = adafruit_connection_manager.get_radio_ssl_context(matrixportal._esp)
 
 # Set up a MiniMQTT Client
+# connect_retries=1: newer MiniMQTT retries connect() internally with exponential
+# backoff (up to ~32s per attempt, 5 attempts by default). That can block long
+# enough to starve the watchdog below. Keep a single attempt here and let
+# _try_reconnect() (which runs from the fed main loop) own the retry policy.
+# socket_timeout=MQTT_LOOP_TIMEOUT: newer MiniMQTT's loop() blocks for the full
+# timeout it's given every call (it's not a quick poll). The main loop below
+# calls client.loop() once per pass and only scrolls text on the passes where
+# it returns, so a 1s (the old default) timeout meant scrolling advanced at
+# 1 pixel/sec. Keep both this and the loop() call below in sync.
+MQTT_LOOP_TIMEOUT = 0.1
 client = MQTT.MQTT(
     broker=secrets["broker"],
     port=secrets.get("broker_port") or 1883,
     username=secrets["broker_user"],
     password=secrets["broker_pass"],
+    socket_pool=pool,
+    ssl_context=ssl_context,
+    connect_retries=1,
+    socket_timeout=MQTT_LOOP_TIMEOUT,
 )
-client.attach_logger()
-client.set_logger_level("DEBUG")
+class _ThrottledMQTTLogHandler(adafruit_logging.StreamHandler):
+    """Passes every MQTT debug line through except the "waiting for
+    messages"/"Loop timed out" pair, which now fires ~10x/sec (once per main
+    loop pass, since MQTT_LOOP_TIMEOUT is small) and drowns out everything
+    else. Throttle just those two to once every few seconds."""
+
+    CHATTY_PREFIXES = ("waiting for messages", "Loop timed out")
+    THROTTLE_SECONDS = 3
+
+    def __init__(self):
+        super().__init__()
+        self._last_chatty = 0
+
+    def emit(self, record):
+        if record.msg.startswith(self.CHATTY_PREFIXES):
+            if record.created - self._last_chatty < self.THROTTLE_SECONDS:
+                return
+            self._last_chatty = record.created
+        super().emit(record)
+
+
+client.logger = adafruit_logging.getLogger("mqtt")
+client.logger.setLevel(adafruit_logging.DEBUG)
+client.logger.addHandler(_ThrottledMQTTLogHandler())
 
 # Connect callback handlers to client
 client.on_connect = connect
@@ -656,7 +720,7 @@ now = t0
 while True:
     try:
         if (
-            not client.loop()
+            not client.loop(timeout=MQTT_LOOP_TIMEOUT)
             and matrixportal._scrolling_index is None
             and not img_state
         ):

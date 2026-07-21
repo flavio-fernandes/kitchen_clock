@@ -12,30 +12,62 @@ project.
 
 [![Kitchen Clock Show-and-Tell](https://live.staticflickr.com/65535/52251360538_e63c498a2d_z.jpg)](https://youtu.be/DB5dh_nL3hY?t=1666)
 
+### CircuitPython firmware
+
+This board runs [CircuitPython 10.2.1](https://circuitpython.org/board/matrixportal_m4/), the
+latest stable release that still supports the MatrixPortal M4 (samd51j19). To flash it:
+
+1. Download the `.uf2` for `matrixportal_m4` from the link above.
+2. Double-tap the reset button on the MatrixPortal to enter the UF2 bootloader; a `MATRIXBOOT`
+   drive appears.
+3. Drag the `.uf2` file onto `MATRIXBOOT`. The board reboots as `CIRCUITPY` running the new
+   version.
+4. Copy this repo's files onto `CIRCUITPY` (see "Copying files from cloned repo" below).
+
 ### Libraries
 
-**Adafruit_CircuitPython_MiniMQTT**: Using commit [407bb4f](https://github.com/adafruit/Adafruit_CircuitPython_MiniMQTT/commit/407bb4f43c0e46c5bcaceccf01481ab9690d6ce3)
+**Adafruit_CircuitPython_MiniMQTT**: Vendored as plain `.py` source (not `.mpy`) to keep readable
+tracebacks, pulled from the [bundle 20260718](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/tag/20260718)
+`-py-` archive.
 
 **Adafruit_CircuitPython_MatrixPortal**: Baseline from commit [6f1d9d4](https://github.com/adafruit/Adafruit_CircuitPython_MatrixPortal/commit/6f1d9d4b7af347cc94a47d379c8bb1f286a2d7b6)
 and removing all the code I did not need.
 
 Besides the 2 libraries above, this project uses the following awesome libraries from the
-[bundle 7.x 20220730](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/tag/20220730):
+[bundle 10.x 20260718](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/tag/20260718):
 ```
-Found device at /Volumes/CIRCUITPY, running CircuitPython 7.3.2.
-- adafruit_bitmap_font==1.5.8
-- adafruit_bus_device==5.2.0
-- adafruit_display_shapes==2.5.1
-- adafruit_display_text==2.22.7
-- adafruit_esp32spi==5.0.0
-- adafruit_logging==4.1.3
-- adafruit_minimqtt==0.0.0-auto.0
-- adafruit_pixelbuf==1.1.5
-- adafruit_requests==1.12.4
-- neopixel==6.3.3
+Found device at /Volumes/CIRCUITPY, running CircuitPython 10.2.1.
+- adafruit_bitmap_font==2.4.2
+- adafruit_bus_device==5.2.17
+- adafruit_connection_manager==3.1.8
+- adafruit_display_text==5.0.4
+- adafruit_esp32spi==11.1.3
+- adafruit_logging==5.6.4
+- adafruit_minimqtt==8.1.0
+- adafruit_pixelbuf==2.0.12
+- adafruit_requests==4.1.17
+- adafruit_ticks==1.1.7
+- neopixel==6.4.2
 ```
 
-But you can probably use newer versions of the 7.x bundle.
+`adafruit_connection_manager` is a new addition: newer `adafruit_esp32spi` releases dropped the
+old `adafruit_esp32spi_socket` module and `MQTT.set_socket()` pattern in favor of a socket-pool
+(`adafruit_connection_manager.get_radio_socketpool()` / `get_radio_ssl_context()`) passed directly
+to `MQTT.MQTT(...)` -- see `kitchen_clock.py`'s "Network Connection" section.
+
+`adafruit_ticks` is also new: `adafruit_minimqtt` now depends on it directly
+(`from adafruit_ticks import ticks_diff, ticks_ms`) for rollover-safe timing. It's a standalone
+single-file library, not something our code imports directly.
+
+`adafruit_display_shapes` was removed: the once-a-second "seconds" indicator used to be a fresh
+`Line` object every tick, which allocates a new Bitmap/Palette/TileGrid 86400 times a day and
+fragments the heap over long uptimes (this was the cause of the clock's animations slowing down
+over time). It's now a single pre-allocated `displayio.Bitmap` repainted in place, which removed
+the last user of that library.
+
+You can probably use newer versions of the 10.x bundle as they come out; just keep the `.mpy`
+files matched to the CircuitPython version flashed on the board (mixing bytecode versions will
+fail to import).
 
 ### Hardware
 
@@ -138,7 +170,7 @@ mosquitto_pub -h $MQTT -t "${PREFIX}/msg" -m \
   '{"msg": "hello", "text_color": "#0x595dff", "timeout": 40, "x": "center"}'
 
 mosquitto_pub -h $MQTT -t "${PREFIX}/msg" -m \
-  '{"msg": "hi", "no_scroll": "True", "x": -10}'
+  '{"msg": "..hi", "no_scroll": "True", "x": -10}'  ; # -10 value x will make the message omit the ".."
 
 mosquitto_pub -h $MQTT -t "${PREFIX}/msg" -m '{"msg": "hi scroll"}'
 

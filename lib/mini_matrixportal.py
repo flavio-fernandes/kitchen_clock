@@ -134,7 +134,7 @@ class MatrixPortal:
             raise RuntimeError("Was not able to find ESP32")
 
         # set the default background
-        self.display.show(self.splash)
+        self.display.root_group = self.splash
 
         self._text = []
         self._text_font = []
@@ -215,7 +215,7 @@ class MatrixPortal:
         for name in self._fonts:
             if font and name != font:
                 continue
-            if name is not "terminal":
+            if name != "terminal":
                 self._fonts[name].load_glyphs(glyphs)
             if self._debug:
                 print(f"Preloading font {name} glyphs: {glyphs}")
@@ -255,22 +255,15 @@ class MatrixPortal:
                 self._scrolling_index = None
 
         if self._text[index]:
-            # print("Replacing text area with :", string)
-            # self._text[index].text = string
-            # return
-            try:
-                text_index = self.splash.index(self._text[index])
-            except AttributeError:
-                for i in range(len(self.splash)):
-                    if self.splash[i] == self._text[index]:
-                        text_index = i
-                        break
-
-            self._text[index] = Label(font, text=string)
+            # Update the existing Label in place instead of building a new
+            # Label (and its underlying Bitmap/Palette) on every call -- this
+            # runs at least once a minute for as long as the clock is on, and
+            # repeated allocation/free churn like that is what fragments
+            # CircuitPython's heap over long uptimes.
+            self._text[index].text = string
             self._text[index].color = self._text_color[index]
             self._text[index].x = self._text_position[index][0]
             self._text[index].y = self._text_position[index][1]
-            self.splash[text_index] = self._text[index]
             return
 
         if self._text_position[index]:  # if we want it placed somewhere...
@@ -364,6 +357,6 @@ class MatrixPortal:
         """
         if isinstance(color, str):
             if color.startswith("#"):
-                return int(color[1:])
+                return int(color[1:], 16)
             return int(color, 16)
         return color  # Return unconverted

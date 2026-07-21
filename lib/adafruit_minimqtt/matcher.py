@@ -11,6 +11,11 @@ https://github.com/eclipse/paho.mqtt.python/blob/master/src/paho/mqtt/matcher.py
 * Author(s): Yoch (https://github.com/yoch)
 """
 
+try:
+    from typing import Dict
+except ImportError:
+    pass
+
 
 class MQTTMatcher:
     """Intended to manage topic filters including wildcards.
@@ -21,20 +26,19 @@ class MQTTMatcher:
     some topic name.
     """
 
-    # pylint: disable=too-few-public-methods
     class Node:
         """Individual node on the MQTT prefix tree."""
 
         __slots__ = "children", "content"
 
-        def __init__(self):
-            self.children = {}
+        def __init__(self) -> None:
+            self.children: Dict[str, MQTTMatcher.Node] = {}
             self.content = None
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._root = self.Node()
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value) -> None:
         """Add a topic filter :key to the prefix tree
         and associate it to :value"""
         node = self._root
@@ -42,7 +46,7 @@ class MQTTMatcher:
             node = node.children.setdefault(sym, self.Node())
         node.content = value
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str):
         """Retrieve the value associated with some topic filter :key"""
         try:
             node = self._root
@@ -54,7 +58,7 @@ class MQTTMatcher:
         except KeyError:
             raise KeyError(key) from None
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: str) -> None:
         """Delete the value associated with some topic filter :key"""
         lst = []
         try:
@@ -65,30 +69,27 @@ class MQTTMatcher:
             node.content = None
         except KeyError:
             raise KeyError(key) from None
-        else:  # cleanup
-            for parent, k, node in reversed(lst):
-                if node.children or node.content is not None:
-                    break
-                del parent.children[k]
+        for parent, k, node in reversed(lst):
+            if node.children or node.content is not None:
+                break
+            del parent.children[k]
 
-    def iter_match(self, topic):
+    def iter_match(self, topic: str):
         """Return an iterator on all values associated with filters
         that match the :topic"""
         lst = topic.split("/")
         normal = not topic.startswith("$")
 
-        def rec(node, i=0):
+        def rec(node: MQTTMatcher.Node, i: int = 0):
             if i == len(lst):
                 if node.content is not None:
                     yield node.content
             else:
                 part = lst[i]
                 if part in node.children:
-                    for content in rec(node.children[part], i + 1):
-                        yield content
+                    yield from rec(node.children[part], i + 1)
                 if "+" in node.children and (normal or i > 0):
-                    for content in rec(node.children["+"], i + 1):
-                        yield content
+                    yield from rec(node.children["+"], i + 1)
             if "#" in node.children and (normal or i > 0):
                 content = node.children["#"].content
                 if content is not None:

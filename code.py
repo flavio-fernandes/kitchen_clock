@@ -1,2 +1,2 @@
-import kitchen_clock.py
+import kitchen_clock
 
